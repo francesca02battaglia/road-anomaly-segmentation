@@ -1,20 +1,62 @@
-# Mask Architecture for Road Scenes
-This is the starting repository for two projects:
-- Mask Architecture Anomaly Segmentation for Road Scenes  [[Project Description](https://drive.google.com/file/d/1Vz08DHsP_mojpCTAQTR6NHVq-2rEqAZM/view?usp=sharing)]
-- Comprehensive Road Scene Understanding for Autonomous Driving  [[Project Description](https://drive.google.com/file/d/1tq5F_j_8O2vlGWbkU1ayPjYvCml1VEwr/view?usp=sharing)]
+# Anomaly Segmentation for Road Scenes with Mask Architectures
 
-This repository consists of the code base for training/testing ERFNet on the Cityscapes dataset and perform anomaly segmentation. It also contains some code referring to EoMT.
+Group project at Politecnico di Torino on **semantic segmentation** and **pixel-level anomaly (out-of-distribution) detection** for autonomous driving.
+We compare a classic per-pixel network (**ERFNet**) with a modern mask-based transformer (**EoMT**, DINOv2 backbone), study how to adapt EoMT across domains (COCO → Cityscapes), and evaluate how well each model spots unexpected objects on the road.
 
-## Folders
-For instructions, please refer to the README in each folder:
+> Fork of [FrancescaFox23/Project_fundamentals](https://github.com/FrancescaFox23/Project_fundamentals), itself built on the course starter code by [Alessandro Marinai](https://github.com/AlessandroMarinai/MaskArchitectureAnomaly_CourseProject).
 
-* [eval](eval) contains tools for evaluating/visualizing an ERFNet model's output and performing anomaly segmentation.
-* [trained_models](trained_models) Contains the ERFNet trained models for the baseline eval. 
-* [eomt](eomt) It is almost the original folder of the EoMT project. Inside it you will find code to train and pretrained checkpoints for EoMT.
+---
 
-## Project notebooks
-The code of the main steps of the project are distributed as follows:
-* the notebook inference.ipynb of the eomt folder contains the code for the inference analysis of step 4 and fine-tuning of step 5.
-* the notebook evalAnomalyStep7.ipynb of the eval folder contains the code for the anomaly evaluation of step 7.
-* the notebook evalAnomalyStep8.ipynb of the eval folder contains the code for the anomaly evaluation of step 8.
+## What we did
 
+| Step | Task | Notebook |
+|---|---|---|
+| 4 | Cross-domain inference: EoMT trained on Cityscapes (semantic) vs EoMT trained on COCO (panoptic), evaluated on Cityscapes | [`eomt/inference.ipynb`](eomt/inference.ipynb) |
+| 5 | Fine-tuning the COCO checkpoint on Cityscapes: head-only, partial backbone unfreezing, LoRA | [`eomt/inference.ipynb`](eomt/inference.ipynb) |
+| 7 | Anomaly segmentation baseline with ERFNet (MSP, MaxLogit, Entropy) | [`eval/evalAnomalyStep7.ipynb`](eval/evalAnomalyStep7.ipynb) |
+| 8 | Anomaly segmentation with EoMT (MSP, MaxLogit, MaxEntropy, RbA) on three checkpoints, plus temperature scaling | [`eval/evalAnomalyStep8.ipynb`](eval/evalAnomalyStep8.ipynb) |
+
+## Key results
+
+### Semantic segmentation (Cityscapes val, 500 images)
+
+| Model | mIoU |
+|---|---|
+| EoMT – Cityscapes checkpoint | **81.7%** |
+| EoMT – COCO panoptic checkpoint (classes mapped to Cityscapes) | 50.1% |
+| COCO → Cityscapes fine-tuning, head only | 74.1% |
+| COCO → Cityscapes fine-tuning, partial backbone unfreezing | 74.8% |
+| COCO → Cityscapes fine-tuning, LoRA | **76.3%** |
+
+Fine-tuning recovers most of the domain gap (+26 mIoU points over the raw COCO model), with LoRA giving the best result on a single consumer GPU.
+
+### Anomaly segmentation (AuPRC ↑ / FPR95 ↓, %)
+
+| Dataset | ERFNet (best: MaxLogit) | EoMT Cityscapes (MSP) |
+|---|---|---|
+| SMIYC RoadAnomaly21 | 38.3 / 59.4 | **68.6 / 14.4** |
+| SMIYC RoadObstacle21 | 4.6 / 48.5 | **84.1 / 4.6** |
+| Fishyscapes Lost & Found | 3.3 / 45.5 | **16.8 / 9.9** |
+| Fishyscapes Static | 9.4 / **40.3** | **62.5** / 43.4 |
+
+Main findings:
+- The mask-based architecture is far better at detecting anomalies than the per-pixel baseline, with much higher AuPRC and lower false-positive rates on most benchmarks.
+- For ERFNet, **MaxLogit** is the most reliable score on every dataset; for the in-domain EoMT checkpoint, plain **MSP** is the most consistent.
+- The COCO checkpoint performs poorly on road anomalies; after fine-tuning on Cityscapes, **MaxEntropy** becomes the best score on the SMIYC benchmarks (75.0% AuPRC on RoadAnomaly21).
+- Temperature scaling on MSP gives only small gains (e.g. 70.4% AuPRC on RoadAnomaly21 at T = 2.0).
+
+Full per-method tables for all three EoMT checkpoints are in the Step 8 notebook.
+
+## Repository structure
+
+```
+eomt/            EoMT code (training, configs, datasets) + inference & fine-tuning notebook
+eval/            ERFNet evaluation tools and anomaly segmentation notebooks
+trained_models/  Pretrained ERFNet weights used for the baseline
+```
+
+See the README inside each folder for setup instructions. Requirements for the main notebooks are in [`eomt/requirements.txt`](eomt/requirements.txt).
+
+## Tech stack
+
+Python · PyTorch · PyTorch Lightning · DINOv2 / EoMT · LoRA · Weights & Biases · Cityscapes, COCO, SMIYC, Fishyscapes, Road Anomaly
